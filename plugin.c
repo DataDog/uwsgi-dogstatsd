@@ -4,7 +4,7 @@
 
 /*
 
-this is a stats pusher plugin for the DogStatsD :
+this is a stats pusher plugin for DogStatsD:
 
 --stats-push dogstatsd:address[,prefix]
 
@@ -12,7 +12,7 @@ example:
 
 --stats-push dogstatsd:127.0.0.1:8125,myinstance
 
-it exports values exposed by the metric subsystem
+exports values exposed by the metric subsystem to a Datadog Agent StatsD server
 
 */
 
@@ -217,15 +217,14 @@ static void stats_pusher_dogstatsd(struct uwsgi_stats_pusher_instance *uspi, tim
   uwsgi_buffer_destroy(ub);
 }
 
-static void stats_pusher_dogstatsd_init(void) {
+static void dogstatsd_init(void) {
         struct uwsgi_stats_pusher *usp = uwsgi_register_stats_pusher("dogstatsd", stats_pusher_dogstatsd);
   // we use a custom format not the JSON one
   usp->raw = 1;
 }
 
-struct uwsgi_plugin stats_pusher_dogstatsd_plugin = {
+struct uwsgi_plugin dogstatsd_plugin = {
 
-        .name = "stats_pusher_dogstatsd",
-        .on_load = stats_pusher_dogstatsd_init,
+        .name = "dogstatsd",
+        .on_load = dogstatsd_init,
 };
-
