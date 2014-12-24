@@ -37,14 +37,14 @@ static int dogstatsd_generate_tags(char *metric, size_t metric_len, char *datato
   static char tag_prefix[] = "|#";
 
   long string_to_int;
-  int got_bytes;
   char *token = NULL;
+  char *ctxt = NULL;
   char *key = NULL;
   char *next_character = NULL;
 
   errno = 0;
 
-  token = strtok(start, metric_separator);
+  token = strtok_r(start, metric_separator, &ctxt);
 
   if (!token)
     return -1;
@@ -61,7 +61,7 @@ static int dogstatsd_generate_tags(char *metric, size_t metric_len, char *datato
     if ((string_to_int == LONG_MIN || string_to_int == LONG_MAX) && errno == ERANGE)
       return -1;
 
-    // check if we actually found an integer and make sure we also have ready key
+    // if we've got a number and a tag value:
     if (next_character != token && key) {
 
       // start with tag_separator if we already have some tags
@@ -69,16 +69,12 @@ static int dogstatsd_generate_tags(char *metric, size_t metric_len, char *datato
       if (strlen(datadog_tags))
        strncat(datadog_tags, tag_separator, (MAX_BUFFER_SIZE - strlen(datadog_tags) - strlen(tag_separator) - 1));
       else
-       strcat(datadog_tags, tag_prefix);
+       strncat(datadog_tags, tag_prefix, (MAX_BUFFER_SIZE - strlen(datadog_tags) - strlen(tag_prefix) - 1));
 
-      // add key to the datadog_tags list
+      // append new tag
       strncat(datadog_tags, key, (MAX_BUFFER_SIZE - strlen(datadog_tags) - strlen(key) - 1));
-
-      // add the value
-      got_bytes = snprintf(datadog_tags, metric_len - 1, "%s%c%ld", datadog_tags, tag_colon, string_to_int);
-
-      if (got_bytes <= 0 || got_bytes >= (int) (MAX_BUFFER_SIZE - 1))
-        return -1;
+      strncat(datadog_tags, &tag_colon, (MAX_BUFFER_SIZE - strlen(datadog_tags) - 2));
+      strncat(datadog_tags, token, (MAX_BUFFER_SIZE - strlen(datadog_tags) - strlen(token) - 1));
 
     } else {
 
@@ -94,7 +90,7 @@ static int dogstatsd_generate_tags(char *metric, size_t metric_len, char *datato
     }
 
     // try to generate tokens before we iterate again
-    token = strtok(start, metric_separator);
+    token = strtok_r(NULL, metric_separator, &ctxt);
   }
 
   return strlen(datatog_metric_name);
