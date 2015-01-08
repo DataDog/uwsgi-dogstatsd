@@ -13,6 +13,9 @@ The plugin is 2.x friendly, so installation can be done directly from the repo:
 uwsgi --build-plugin https://github.com/Datadog/uwsgi-dogstatsd
 ```
 
+If you are packaging the plugin for distribution, please read the [uWSGI Guide for Packagers](http://projects.unbit.it/uwsgi/wiki/Guide4Packagers) 
+on plugin placement and extra directives like `plugin_dir`.
+
 USAGE
 =====
 
