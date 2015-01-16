@@ -73,7 +73,7 @@ static int dogstatsd_generate_tags(char *metric, size_t metric_len, char *datato
 
       // append new tag
       strncat(datadog_tags, key, (MAX_BUFFER_SIZE - strlen(datadog_tags) - strlen(key) - 1));
-      strncat(datadog_tags, &tag_colon, (MAX_BUFFER_SIZE - strlen(datadog_tags) - 2));
+      strncat(datadog_tags, &tag_colon, 1);
       strncat(datadog_tags, token, (MAX_BUFFER_SIZE - strlen(datadog_tags) - strlen(token) - 1));
 
     } else {
