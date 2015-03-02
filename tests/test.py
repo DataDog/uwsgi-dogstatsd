@@ -1,17 +1,13 @@
 import select
 import socket
 import sys
+import threading
 import urllib2
 from time import time, sleep
 
 UDP_SOCKET_TIMEOUT = 5
-
-class Test(object):
-    def __init__(self, data):
-        self.data = data
-
-    def run(self):
-        return
+exitFlag = 0
+dataLock = threading.Lock()
 
 class Data(object):
     """
@@ -45,7 +41,6 @@ class Data(object):
             'metric_type': metric_type,
             'tags': tags
         }
-        print metric
         self.data[name_value[0]] = metric
 
     def new_packets(self, packets):
@@ -59,7 +54,20 @@ class Data(object):
     def get_data(self):
         return self.data
 
-class Server(object):
+class Test(threading.Thread):
+    """
+    The class which trigger tests and check results
+    """
+    def __init__(self, data):
+        threading.Thread.__init__(self)
+        self.data = data
+
+    def run(self):
+        while not exitFlag:
+            print "test"
+            sleep(3)
+
+class Server(threading.Thread):
     """
     The process which will listen on the statd port
     """
@@ -69,6 +77,7 @@ class Server(object):
     }
 
     def __init__(self, data):
+        threading.Thread.__init__(self)
         self.data = data
         self.buffer_size = 1024 * 8
         self.address = (self.config['host'], self.config['port'])
@@ -90,30 +99,35 @@ class Server(object):
         select_select = select.select
         timeout = UDP_SOCKET_TIMEOUT
   
-        self.running = True
-        while self.running:
+        while not exitFlag:
             try:
                 ready = select_select(sock, [], [], timeout)
                 if ready[0]:
                     message = self.socket.recv(self.buffer_size)
                     self.data.new_packets(message)
-            except (KeyboardInterrupt, SystemExit):
-                break
             except Exception:
                 print 'Error receiving datagram'
 
-    def stop(self):
-        sef.running = False
+def main(server):
+    server.start()
+    i = 5
 
-def main():
-    data = Data()
-    server = Server(data)
-    test = Test(data)
-    try:
-        server.run()
-        test.run()
-    except:
-        print 'Error: unable to start thread'
+data = Data()
+server = Server(data)
+test = Test(data)
+#main(server)
+server.start()
+test.start()
+i = 5
+while i > 0:
+    i -= 1
+    print i
+    sleep(1)
+exitFlag = 1
+server.join()
+test.join()
+print 'Exiting'
 
-if __name__ == '__main__':
-    sys.exit(main())
+
+#if __name__ == '__main__':
+#    sys.exit(main())
