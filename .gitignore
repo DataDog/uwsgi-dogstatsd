@@ -1,3 +1,4 @@
 dogstatsd_plugin.so
 .uwsgi_plugins_builder/
 example/uwsgi-dogstatsd/
+tests/uwsgi-dogstatsd/

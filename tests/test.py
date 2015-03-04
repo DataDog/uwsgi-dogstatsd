@@ -8,6 +8,7 @@ from time import time, sleep
 
 UDP_SOCKET_TIMEOUT = 5
 exitFlag = 0
+exitValue = 0
 
 def setExitFlag(n):
     global exitFlag
@@ -105,14 +106,19 @@ class Test(threading.Thread):
         self.failure = 0
         self.errors = []
 
+    def setExitValue(self, val):
+        global exitValue
+        exitValue = val
+
     def check(self):
         attributes_changed = self.data.getChangedAttributes()
 
-        if hasattr(self, 'oldData'):
+        if hasattr(self, 'oldData') and self.tests < 4:
             for k in self.COUNT_METRICS:
                 if k in attributes_changed and k in self.oldData and attributes_changed[k] == self.oldData[k] + 1:
                     self.success += 1
                 else:
+                    self.setExitValue(1)
                     self.failure += 1
                     self.errors.append(k)
 
@@ -120,6 +126,7 @@ class Test(threading.Thread):
                 if k in attributes_changed and k in self.oldData and attributes_changed[k] >= self.oldData[k]:
                     self.success += 1
                 else:
+                    self.setExitValue(1)
                     self.failure += 1
                     self.errors.append(k)
 
@@ -127,6 +134,7 @@ class Test(threading.Thread):
                 if k in attributes_changed and k in self.oldData and v[0] <= attributes_changed[k] <= v[1]:
                     self.success += 1
                 else:
+                    self.setExitValue(1)
                     self.failure += 1
                     self.errors.append(k)
 
@@ -228,6 +236,7 @@ def main():
     server.join()
     test.join()
     print 'END TEST: Exiting'
+    return exitValue
 
 if __name__ == '__main__':
     sys.exit(main())
