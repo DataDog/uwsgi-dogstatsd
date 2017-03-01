@@ -1,16 +1,18 @@
 #include <uwsgi.h>
+#include <stdbool.h>
 
 #define MAX_BUFFER_SIZE 8192
+#define MAX_CUSTOM_TAGS 10
 
 /*
 
 this is a stats pusher plugin for DogStatsD:
 
---stats-push dogstatsd:address[,prefix]
+--stats-push dogstatsd:address[,prefix][;custom_tag_name:custom_tag_value...]
 
 example:
 
---stats-push dogstatsd:127.0.0.1:8125,myinstance
+--stats-push dogstatsd:127.0.0.1:8125,myinstance,custom_tag_name:custom_tag_value,custom_tag2_name:custom_tag2_value
 
 exports values exposed by the metric subsystem to a Datadog Agent StatsD server
 
@@ -25,6 +27,8 @@ struct dogstatsd_node {
   socklen_t addr_len;
   char *prefix;
   uint16_t prefix_len;
+  char *custom_tags[MAX_CUSTOM_TAGS];
+  uint16_t custom_tag_lens[MAX_CUSTOM_TAGS];
 };
 
 static int dogstatsd_generate_tags(char *metric, size_t metric_len, char *datatog_metric_name, char *datadog_tags) {
@@ -103,6 +107,7 @@ static int dogstatsd_send_metric(struct uwsgi_buffer *ub, struct uwsgi_stats_pus
   char datatog_metric_name[MAX_BUFFER_SIZE];
   char datadog_tags[MAX_BUFFER_SIZE];
   char raw_metric_name[MAX_BUFFER_SIZE];
+  char custom_tags_str[MAX_BUFFER_SIZE];
 
   int extracted_tags = 0;
 
@@ -115,6 +120,7 @@ static int dogstatsd_send_metric(struct uwsgi_buffer *ub, struct uwsgi_stats_pus
 
   // sanitize buffers
   memset(datadog_tags, 0, MAX_BUFFER_SIZE);
+  memset(custom_tags_str, 0, MAX_BUFFER_SIZE);
   memset(datatog_metric_name, 0, MAX_BUFFER_SIZE);
 
   // let's copy original metric name before we start
@@ -144,6 +150,24 @@ static int dogstatsd_send_metric(struct uwsgi_buffer *ub, struct uwsgi_stats_pus
   if (extracted_tags) {
     if (uwsgi_buffer_append(ub, datadog_tags, strlen(datadog_tags))) return -1;
   }
+  // add any custom tags
+  if (sn->custom_tags[0] != NULL){
+    if (strlen(datadog_tags) > 0) {
+      strcpy(custom_tags_str, ",");
+    } else {
+      strcpy(custom_tags_str, "|#");
+    }
+    strcat(custom_tags_str, sn->custom_tags[0]);
+    int i;
+    for (i=1; i<MAX_CUSTOM_TAGS; ++i) {
+      if (sn->custom_tags[i] == NULL){
+        break;
+      }
+      strncat(custom_tags_str, ",", 1);
+      strncat(custom_tags_str, sn->custom_tags[i], sn->custom_tag_lens[i]);
+    }
+    if (uwsgi_buffer_append(ub, custom_tags_str, strlen(custom_tags_str))) return -1;
+  }
 
   if (sendto(sn->fd, ub->buf, ub->pos, 0, (struct sockaddr *) &sn->addr.sa_in, sn->addr_len) < 0) {
     uwsgi_error("dogstatsd_send_metric()/sendto()");
@@ -157,15 +181,51 @@ static void stats_pusher_dogstatsd(struct uwsgi_stats_pusher_instance *uspi, tim
 
   if (!uspi->configured) {
     struct dogstatsd_node *sn = uwsgi_calloc(sizeof(struct dogstatsd_node));
+
     char *comma = strchr(uspi->arg, ',');
+    char *pipe = strchr(uspi->arg, '|');
+    bool has_prefix = false;
+    bool has_custom_tags = false;
+    int num_custom_tags = 0;
     if (comma) {
-      sn->prefix = comma+1;
-      sn->prefix_len = strlen(sn->prefix);
-      *comma = 0;
+        if (pipe) {
+            has_custom_tags = true;
+            if ((comma - uspi->arg) < (pipe - uspi->arg)) {
+                has_prefix = true;
+            }
+        } else {
+            has_prefix = true;
+        }
+    } else {
+        if (pipe) {
+            has_custom_tags = true;
+        }
+    }
+    char* token;
+
+    if (has_prefix) {
+        if (has_custom_tags) {
+            token = strtok(comma+1, "|");
+        } else {
+            token = comma+1;
+        }
+        sn->prefix = token;
+        sn->prefix_len = strlen(token);
+        *comma = 0;
     }
     else {
       sn->prefix = "uwsgi";
       sn->prefix_len = 5;
+    }
+
+    if (has_custom_tags) {
+        token = strtok(pipe+2, ","); // +2 to remove the #
+        while (token != NULL) {
+            sn->custom_tags[num_custom_tags] = token;
+            sn->custom_tag_lens[num_custom_tags] = strlen(token);
+            num_custom_tags += 1;
+            token = strtok(NULL, ",");
+        }
     }
 
     char *colon = strchr(uspi->arg, ':');
