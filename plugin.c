@@ -61,7 +61,7 @@ static int dogstatsd_generate_tags(char *metric, size_t metric_len, char *datado
   if (!token)
     return -1;
 
-  while (token != NULL && metric_len >= metric_offset) {
+  while (token && metric_len >= metric_offset) {
 
     metric_offset += strlen(token) + 1;
     start = metric + metric_offset;
@@ -76,12 +76,9 @@ static int dogstatsd_generate_tags(char *metric, size_t metric_len, char *datado
     // if we've got a number and a tag value:
     if (next_character != token && key) {
 
-      // start with tag_separator if we already have some tags
-      //   otherwise put the tag_prefix
-      if (strlen(datadog_tags))
-       strncat(datadog_tags, tag_separator, (MAX_BUFFER_SIZE - strlen(datadog_tags) - strlen(tag_separator) - 1));
-      else
-       strncat(datadog_tags, tag_prefix, (MAX_BUFFER_SIZE - strlen(datadog_tags) - strlen(tag_prefix) - 1));
+      // start with tag_separator if we already have some tags, otherwise put the tag_prefix
+      char *delimiter = strlen(datadog_tags) ? tag_separator : tag_prefix;
+      strncat(datadog_tags, delimiter, (MAX_BUFFER_SIZE - strlen(datadog_tags) - strlen(delimiter) - 1));
 
       // append new tag
       strncat(datadog_tags, key, (MAX_BUFFER_SIZE - strlen(datadog_tags) - strlen(key) - 1));
@@ -95,7 +92,7 @@ static int dogstatsd_generate_tags(char *metric, size_t metric_len, char *datado
 
       // start with metric_separator if we already have some metrics
       if (strlen(datadog_metric_name))
-       strncat(datadog_metric_name, metric_separator, (MAX_BUFFER_SIZE - strlen(datadog_metric_name) - strlen(metric_separator) - 1));
+        strncat(datadog_metric_name, metric_separator, (MAX_BUFFER_SIZE - strlen(datadog_metric_name) - strlen(metric_separator) - 1));
 
       // add token
       strncat(datadog_metric_name, token, (MAX_BUFFER_SIZE - strlen(datadog_metric_name) - strlen(token) - 1));
@@ -106,17 +103,14 @@ static int dogstatsd_generate_tags(char *metric, size_t metric_len, char *datado
   }
 
   // add extra tags from comma-separated string of tags in config.tags
-  if (config.tags != NULL) {
+  if (config.tags) {
     struct uwsgi_string_list *usl = config.tags;
     while (usl) {
       char *tag = usl->value;
 
       // start with tag_separator if we already have some tags, otherwise put the tag_prefix
-      if (strlen(datadog_tags)) {
-        strncat(datadog_tags, tag_separator, (MAX_BUFFER_SIZE - strlen(datadog_tags) - strlen(tag_separator) - 1));
-      } else {
-        strncat(datadog_tags, tag_prefix, (MAX_BUFFER_SIZE - strlen(datadog_tags) - strlen(tag_prefix) - 1));
-      }
+      char *delimiter = strlen(datadog_tags) ? tag_separator : tag_prefix;
+      strncat(datadog_tags, delimiter, (MAX_BUFFER_SIZE - strlen(datadog_tags) - strlen(delimiter) - 1));
 
       // append new tag
       strncat(datadog_tags, tag, (MAX_BUFFER_SIZE - strlen(datadog_tags) - strlen(tag) - 1));
