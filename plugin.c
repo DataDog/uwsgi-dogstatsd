@@ -11,6 +11,7 @@ this is a stats pusher plugin for DogStatsD:
 example:
 
 --stats-push dogstatsd:127.0.0.1:8125,myinstance
+--dogstatsd-tags service_name:frontend_service,environment:staging
 
 exports values exposed by the metric subsystem to a Datadog Agent StatsD server
 
@@ -18,7 +19,7 @@ exports values exposed by the metric subsystem to a Datadog Agent StatsD server
 
 extern struct uwsgi_server uwsgi;
 
-// configuration of a dogstatsd node
+// configuration of a dogstatsd stats pusher node
 struct dogstatsd_node {
   int fd;
   union uwsgi_sockaddr addr;
@@ -27,7 +28,18 @@ struct dogstatsd_node {
   uint16_t prefix_len;
 };
 
-static int dogstatsd_generate_tags(char *metric, size_t metric_len, char *datatog_metric_name, char *datadog_tags) {
+// configuration of dogstatsd
+static struct dogstatsd_config {
+  struct uwsgi_string_list *tags;
+} config;
+
+static struct uwsgi_option dogstatsd_options[] = {
+    {"dogstatsd-tags", no_argument, 0, "comma-separated list of tags to send with metrics", uwsgi_opt_add_string_list, &config.tags, 0},
+
+    {0, 0, 0, 0, 0, 0, 0},
+};
+
+static int dogstatsd_generate_tags(char *metric, size_t metric_len, char *datadog_metric_name, char *datadog_tags) {
   char *start = metric;
   size_t metric_offset = 0;
 
@@ -82,25 +94,45 @@ static int dogstatsd_generate_tags(char *metric, size_t metric_len, char *datato
       key = token;
 
       // start with metric_separator if we already have some metrics
-      if (strlen(datatog_metric_name))
-       strncat(datatog_metric_name, metric_separator, (MAX_BUFFER_SIZE - strlen(datatog_metric_name) - strlen(metric_separator) - 1));
+      if (strlen(datadog_metric_name))
+       strncat(datadog_metric_name, metric_separator, (MAX_BUFFER_SIZE - strlen(datadog_metric_name) - strlen(metric_separator) - 1));
 
       // add token
-      strncat(datatog_metric_name, token, (MAX_BUFFER_SIZE - strlen(datatog_metric_name) - strlen(token) - 1));
+      strncat(datadog_metric_name, token, (MAX_BUFFER_SIZE - strlen(datadog_metric_name) - strlen(token) - 1));
     }
 
     // try to generate tokens before we iterate again
     token = strtok_r(NULL, metric_separator, &ctxt);
   }
 
-  return strlen(datatog_metric_name);
+  // add extra tags from comma-separated string of tags in config.tags
+  if (config.tags != NULL) {
+    struct uwsgi_string_list *usl = config.tags;
+    while (usl) {
+      char *tag = usl->value;
+
+      // start with tag_separator if we already have some tags, otherwise put the tag_prefix
+      if (strlen(datadog_tags)) {
+        strncat(datadog_tags, tag_separator, (MAX_BUFFER_SIZE - strlen(datadog_tags) - strlen(tag_separator) - 1));
+      } else {
+        strncat(datadog_tags, tag_prefix, (MAX_BUFFER_SIZE - strlen(datadog_tags) - strlen(tag_prefix) - 1));
+      }
+
+      // append new tag
+      strncat(datadog_tags, tag, (MAX_BUFFER_SIZE - strlen(datadog_tags) - strlen(tag) - 1));
+
+      usl = usl->next;
+    }
+  }
+
+  return strlen(datadog_metric_name);
 }
 
 
 static int dogstatsd_send_metric(struct uwsgi_buffer *ub, struct uwsgi_stats_pusher_instance *uspi, char *metric, size_t metric_len, int64_t value, char type[2]) {
   struct dogstatsd_node *sn = (struct dogstatsd_node *) uspi->data;
 
-  char datatog_metric_name[MAX_BUFFER_SIZE];
+  char datadog_metric_name[MAX_BUFFER_SIZE];
   char datadog_tags[MAX_BUFFER_SIZE];
   char raw_metric_name[MAX_BUFFER_SIZE];
 
@@ -115,13 +147,13 @@ static int dogstatsd_send_metric(struct uwsgi_buffer *ub, struct uwsgi_stats_pus
 
   // sanitize buffers
   memset(datadog_tags, 0, MAX_BUFFER_SIZE);
-  memset(datatog_metric_name, 0, MAX_BUFFER_SIZE);
+  memset(datadog_metric_name, 0, MAX_BUFFER_SIZE);
 
   // let's copy original metric name before we start
   strncpy(raw_metric_name, metric, metric_len + 1);
 
   // try to extract tags
-  extracted_tags = dogstatsd_generate_tags(raw_metric_name, metric_len, datatog_metric_name, datadog_tags);
+  extracted_tags = dogstatsd_generate_tags(raw_metric_name, metric_len, datadog_metric_name, datadog_tags);
 
   if (extracted_tags < 0)
     return -1;
@@ -129,9 +161,9 @@ static int dogstatsd_send_metric(struct uwsgi_buffer *ub, struct uwsgi_stats_pus
   if (uwsgi_buffer_append(ub, sn->prefix, sn->prefix_len)) return -1;
   if (uwsgi_buffer_append(ub, ".", 1)) return -1;
 
-  // put the datatog_metric_name if we found some tags
+  // put the datadog_metric_name if we found some tags
   if (extracted_tags) {
-    if (uwsgi_buffer_append(ub, datatog_metric_name, strlen(datatog_metric_name))) return -1;
+    if (uwsgi_buffer_append(ub, datadog_metric_name, strlen(datadog_metric_name))) return -1;
   } else {
     if (uwsgi_buffer_append(ub, metric, strlen(metric))) return -1;
   }
@@ -222,5 +254,6 @@ static void dogstatsd_init(void) {
 struct uwsgi_plugin dogstatsd_plugin = {
 
         .name = "dogstatsd",
+        .options = dogstatsd_options,
         .on_load = dogstatsd_init,
 };

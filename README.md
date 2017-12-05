@@ -25,7 +25,7 @@ Depends on a Datadog Agent to be installed and by default listens for dogstatsd 
 
 Configure your `.ini` file to enable the metrics subsystem, and enable the dogstatsd plugin.
 
-Here's a
+Here's an example:
 
 ```ini
 [uwsgi]
@@ -39,11 +39,14 @@ http = :9090
 enable-metrics = true
 plugin = dogstatsd
 stats-push = dogstatsd:127.0.0.1:8125,myapp
+dogstatsd-tags = service_name:frontend_service,environment:staging
 
 # Application to load
 wsgi-file = app.py
 ...
 ```
+
+The `dogstatsd-tags` argument is an optional list of tags to add to every metric.
 
 This will begin producing metrics with the prefix defined in the configuration, `myapp` here:
 
