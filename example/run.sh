@@ -1,6 +1,6 @@
-pip install -r requirements.txt
+pip install uWSGI==2.0.17
 
-uwsgi --build-plugin https://github.com/Datadog/uwsgi-dogstatsd
+uwsgi --build-plugin ..
 
 uwsgi app.ini
 
