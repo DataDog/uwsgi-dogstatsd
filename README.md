@@ -45,6 +45,19 @@ wsgi-file = app.py
 ...
 ```
 
+You can also add additional tags or filter which metrics are published (or how they are published) using one or more optional configuration options:
+
+```ini
+stats-push = dogstatsd:127.0.0.1:8125,myapp
+dogstatsd-extra-tags = app:foo_service,instance:1
+dogstatsd-no-workers = true
+dogstatsd-all_gauges = true
+dogstatsd-whitelist-metric = core.busy_workers
+dogstatsd-whitelist-metric = core.idle_workers
+dogstatsd-whitelist-metric = core.overloaded
+dogstatsd-whitelist-metric = socket.listen_queue
+```
+
 This will begin producing metrics with the prefix defined in the configuration, `myapp` here:
 
 ```console
