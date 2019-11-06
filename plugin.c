@@ -18,6 +18,21 @@ exports values exposed by the metric subsystem to a Datadog Agent StatsD server
 
 extern struct uwsgi_server uwsgi;
 
+struct dogstatsd_config {
+    int no_workers;
+    int all_gauges;
+    char *extra_tags;
+    struct uwsgi_string_list *metrics_whitelist;
+} u_dogstatsd_config;
+
+static struct uwsgi_option dogstatsd_options[] = {
+  {"dogstatsd-no-workers", no_argument, 0, "disable generation of single-worker metrics", uwsgi_opt_true, &u_dogstatsd_config.no_workers, 0},
+  {"dogstatsd-all-gauges", no_argument, 0, "push all metrics to dogstatsd as gauges", uwsgi_opt_true, &u_dogstatsd_config.all_gauges, 0},
+  {"dogstatsd-extra-tags", required_argument, 0, "add these extra tags to all metrics (example: foo:bar,qin,baz:qux)", uwsgi_opt_set_str, &u_dogstatsd_config.extra_tags, 0},
+  {"dogstatsd-whitelist-metric", required_argument, 0, "use one or more times to send only the whitelisted metrics (do not add prefix)", uwsgi_opt_add_string_list, &u_dogstatsd_config.metrics_whitelist, 0},
+  UWSGI_END_OF_OPTIONS
+};
+
 // configuration of a dogstatsd node
 struct dogstatsd_node {
   int fd;
@@ -48,6 +63,11 @@ static int dogstatsd_generate_tags(char *metric, size_t metric_len, char *datato
 
   if (!token)
     return -1;
+
+  if (u_dogstatsd_config.extra_tags && strlen(u_dogstatsd_config.extra_tags)) {
+    strncat(datadog_tags, tag_prefix, (MAX_BUFFER_SIZE - strlen(datadog_tags) - strlen(tag_prefix) - 1));
+    strncat(datadog_tags, u_dogstatsd_config.extra_tags, (MAX_BUFFER_SIZE - strlen(datadog_tags) - strlen(u_dogstatsd_config.extra_tags) - 1));
+  }
 
   while (token != NULL && metric_len >= metric_offset) {
 
@@ -126,6 +146,10 @@ static int dogstatsd_send_metric(struct uwsgi_buffer *ub, struct uwsgi_stats_pus
   if (extracted_tags < 0)
     return -1;
 
+  if (u_dogstatsd_config.metrics_whitelist && !uwsgi_string_list_has_item(u_dogstatsd_config.metrics_whitelist, datatog_metric_name, strlen(datatog_metric_name))) {
+    return 0;
+  }
+
   if (uwsgi_buffer_append(ub, sn->prefix, sn->prefix_len)) return -1;
   if (uwsgi_buffer_append(ub, ".", 1)) return -1;
 
@@ -191,12 +215,22 @@ static void stats_pusher_dogstatsd(struct uwsgi_stats_pusher_instance *uspi, tim
   }
 
   // we use the same buffer for all of the packets
+  if (uwsgi.metrics_cnt <= 0) {
+    uwsgi_log(" *** WARNING: Dogstatsd stats pusher configured but there are no metrics to push ***\n");
+    return;
+  }
+
   struct uwsgi_buffer *ub = uwsgi_buffer_new(uwsgi.page_size);
   struct uwsgi_metric *um = uwsgi.metrics;
   while(um) {
+    if (u_dogstatsd_config.no_workers && !uwsgi_starts_with(um->name, um->name_len, "worker.", 7)) {
+      um = um->next;
+      continue;
+    }
+
     uwsgi_rlock(uwsgi.metrics_lock);
     // ignore return value
-    if (um->type == UWSGI_METRIC_GAUGE) {
+    if (u_dogstatsd_config.all_gauges || um->type == UWSGI_METRIC_GAUGE) {
       dogstatsd_send_metric(ub, uspi, um->name, um->name_len, *um->value, "|g");
     }
     else {
@@ -214,13 +248,14 @@ static void stats_pusher_dogstatsd(struct uwsgi_stats_pusher_instance *uspi, tim
 }
 
 static void dogstatsd_init(void) {
-        struct uwsgi_stats_pusher *usp = uwsgi_register_stats_pusher("dogstatsd", stats_pusher_dogstatsd);
+  struct uwsgi_stats_pusher *usp = uwsgi_register_stats_pusher("dogstatsd", stats_pusher_dogstatsd);
   // we use a custom format not the JSON one
   usp->raw = 1;
 }
 
 struct uwsgi_plugin dogstatsd_plugin = {
 
-        .name = "dogstatsd",
-        .on_load = dogstatsd_init,
+    .name = "dogstatsd",
+    .options = dogstatsd_options,
+    .on_load = dogstatsd_init,
 };
