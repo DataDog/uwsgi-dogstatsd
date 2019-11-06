@@ -51,7 +51,7 @@ You can also add additional tags or filter which metrics are published (or how t
 stats-push = dogstatsd:127.0.0.1:8125,myapp
 dogstatsd-extra-tags = app:foo_service,instance:1
 dogstatsd-no-workers = true
-dogstatsd-all_gauges = true
+dogstatsd-all-gauges = true
 dogstatsd-whitelist-metric = core.busy_workers
 dogstatsd-whitelist-metric = core.idle_workers
 dogstatsd-whitelist-metric = core.overloaded
