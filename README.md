@@ -99,3 +99,16 @@ Read more on the [uWSGI Metrics subsystem] for further explanation on metrics pr
 [DogStatsD]: http://docs.datadoghq.com/guides/dogstatsd/
 [uWSGI]: http://uwsgi-docs.readthedocs.org/
 [uWSGI Metrics subsystem]: http://uwsgi-docs.readthedocs.org/en/latest/Metrics.html
+
+### Note on Containerized Docker Agent
+To make use of this stats-pusher, you must enable dogstatsd and **enable non-local traffic**. You must set two config values via environment variables or config file:
+1. Environment Variables
+    ```
+     DD_USE_DOGSTATSD=true
+     DD_DOGSTATSD_NON_LOCAL_TRAFFIC=true
+    ```
+2. Config yaml
+    ```
+     dogstatsd_stats_enable: true
+     dogstatsd_non_local_traffic: true
+    ```
