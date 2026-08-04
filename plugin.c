@@ -229,13 +229,15 @@ static void stats_pusher_dogstatsd(struct uwsgi_stats_pusher_instance *uspi, tim
     }
 
     uwsgi_rlock(uwsgi.metrics_lock);
-    // ignore return value
-    if (u_dogstatsd_config.all_gauges || um->type == UWSGI_METRIC_GAUGE) {
-      dogstatsd_send_metric(ub, uspi, um->name, um->name_len, *um->value, "|g");
-    }
-    else {
-      dogstatsd_send_metric(ub, uspi, um->name, um->name_len, *um->value, "|c");
-    }
+    // Send all uwsgi metrics as DogStatsD gauges (|g), not counters (|c).
+    //
+    // DogStatsD counters sum values received during a flush period, which breaks
+    // uwsgi's cumulative metrics. For example, if worker.respawns=3 is pushed 5 times
+    // per flush period, DogStatsD would report 15 instead of 3.
+    //
+    // Gauges report the last received value, which correctly represents uwsgi's
+    // snapshot and cumulative metrics. DogStatsD can calculate rates from gauges.
+    dogstatsd_send_metric(ub, uspi, um->name, um->name_len, *um->value, "|g");
     uwsgi_rwunlock(uwsgi.metrics_lock);
     if (um->reset_after_push){
       uwsgi_wlock(uwsgi.metrics_lock);

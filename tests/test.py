@@ -138,6 +138,16 @@ class Test(threading.Thread):
                     self.failure += 1
                     self.errors.append(k)
 
+            # Verify that ALL metrics are sent as gauges (|g), not counters (|c)
+            all_data = self.data.get_data()
+            for k, v in all_data.iteritems():
+                if v['metric_type'] == 'g':
+                    self.success += 1
+                else:
+                    self.setExitValue(1)
+                    self.failure += 1
+                    self.errors.append(k + ' (wrong type: ' + v['metric_type'] + ', expected g)')
+
         self.oldData = attributes_changed
 
     def printResult(self):
